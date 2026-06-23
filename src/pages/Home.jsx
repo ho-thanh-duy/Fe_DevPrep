@@ -1,7 +1,13 @@
 import { NavLink } from "react-router-dom";
 import "./Home.css";
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
 export default function Home() {
+ // check token and user from localStorage
+  const token = localStorage.getItem("token");
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+
   const stats = [
     { value: "97%", label: "SUCCESS RATE" },
     { value: "50K+", label: "SESSIONS" },
@@ -32,6 +38,22 @@ export default function Home() {
     "Review & Improve",
   ];
 
+  //   useEffect(() => {
+  //   localStorage.setItem("token", "sample-token-123");
+
+  //   localStorage.setItem(
+  //     "user",
+  //     JSON.stringify({
+  //       id: 1,
+  //       name: "Ho Thanh Duy",
+  //       avatar: "https://i.pravatar.cc/150?img=3",
+  //     })
+  //   );
+  // }, []);
+  console.log(token, "token", user, "user");
+localStorage.removeItem("token");
+localStorage.removeItem("user");
+
   return (
     <div className="home">
 
@@ -47,9 +69,25 @@ export default function Home() {
           <li>FEEDBACK AI</li>
         </ul>
 
-        <div className="nav-btns">
-           <NavLink to="/login">Login</NavLink>
-          <button className="start-btn">Get Started</button>
+       <div className="nav-btns">
+          {!token ? (
+            <>
+            <NavLink to="/login">Login</NavLink> <button className="start-btn">Get Started</button>
+            </>
+          ) : (
+            <NavLink to="/profile">
+              <img
+                src={
+                  user?.avatar ||
+                  "https://ui-avatars.com/api/?name=User"
+                }
+                alt="Profile"
+                className="profile-avatar"
+              />
+            </NavLink>
+          )}
+
+          
         </div>
       </header>
 
