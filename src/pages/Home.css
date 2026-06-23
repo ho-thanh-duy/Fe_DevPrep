@@ -409,3 +409,18 @@ body{
     display:none;
   }
 }
+
+.profile-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.profile-avatar:hover {
+  transform: scale(1.05);
+}
+
