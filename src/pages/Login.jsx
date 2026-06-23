@@ -1,11 +1,15 @@
 import { useState } from "react";
+import { MdEmail, MdLock } from "react-icons/md";
+import { FcGoogle } from "react-icons/fc";
+import { AiFillGithub, AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
 import "./Login.css";
 
-function Login() {
+function Login({ isModal }) {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -23,11 +27,9 @@ function Login() {
   };
 
   return (
-    <div className="login-page">
+    <div id="login-page">
+    <div className={isModal ? "login-page modal-login" : "login-page"}>
       <div className="login-card">
-
-        <h2 className="logo">DevPrep AI</h2>
-
         <h1>Welcome Back</h1>
 
         <p className="subtitle">
@@ -39,27 +41,45 @@ function Login() {
           <div className="form-group">
             <label>Email Address</label>
 
-            <input
-              type="email"
-              name="email"
-              placeholder="engineer@devprep.ai"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
+            <div className="input-wrapper">
+              <MdEmail className="input-icon" />
+              <input
+                type="email"
+                name="email"
+                placeholder="engineer@devprep.ai"
+                value={formData.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
           </div>
 
           <div className="form-group">
             <label>Password</label>
 
-            <input
-              type="password"
-              name="password"
-              placeholder="Enter your password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-            />
+            <div className="input-wrapper">
+              <MdLock className="input-icon" />
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Enter your password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <AiOutlineEyeInvisible />
+                ) : (
+                  <AiOutlineEye />
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="form-options">
@@ -85,11 +105,13 @@ function Login() {
 
         <div className="social-buttons">
           <button className="social-btn">
-            Google
+            <FcGoogle size={18} />
+            <span>Google</span>
           </button>
 
           <button className="social-btn">
-            GitHub
+            <AiFillGithub size={18} />
+            <span>GitHub</span>
           </button>
         </div>
 
@@ -100,6 +122,8 @@ function Login() {
 
       </div>
     </div>
+    </div>
+
   );
 }
 

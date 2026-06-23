@@ -7,6 +7,7 @@ import Home from "../pages/Home";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
 import ForgotPassword from "../pages/ForgotPassword";
+import ListNew from "../pages/ListNew";
 function AppRoutes() {
   return (
     <BrowserRouter>
@@ -15,6 +16,7 @@ function AppRoutes() {
         {/* Public Pages */}
         <Route element={<MainLayout />}>
           <Route index element={<Home />} />
+          <Route path="/news" element={<ListNew />} />
         </Route>
 
         {/* Auth Pages */}
