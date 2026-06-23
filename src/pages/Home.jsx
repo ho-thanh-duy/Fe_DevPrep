@@ -53,6 +53,8 @@ export default function Home() {
   console.log(token, "token", user, "user");
 localStorage.removeItem("token");
 localStorage.removeItem("user");
+localStorage.removeItem("user1");
+
 
   return (
     <div className="home">
