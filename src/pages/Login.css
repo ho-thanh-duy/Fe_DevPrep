@@ -146,6 +146,13 @@
   text-decoration: none;
 }
 
+.auth-error {
+  margin-top: 10px;
+  color: #fca5a5;
+  font-size: 12px;
+  text-align: center;
+}
+
 .login-btn {
   width: 100%;
   height: 36px;

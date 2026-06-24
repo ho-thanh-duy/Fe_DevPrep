@@ -1,4 +1,5 @@
 import "./Home.css";
+
 export default function Home() {
   const stats = [
     { value: "97%", label: "SUCCESS RATE" },
