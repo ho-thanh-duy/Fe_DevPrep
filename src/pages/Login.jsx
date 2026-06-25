@@ -2,12 +2,23 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MdEmail, MdLock } from "react-icons/md";
 import { FcGoogle } from "react-icons/fc";
-import { AiFillGithub, AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
-import { useGoogleLogin } from "@react-oauth/google";
-import { GithubAuthProvider, signInWithPopup } from "firebase/auth";
+import {
+  AiFillGithub,
+  AiOutlineEye,
+  AiOutlineEyeInvisible,
+} from "react-icons/ai";
+import {
+  GithubAuthProvider,
+  GoogleAuthProvider,
+  signInWithPopup,
+  linkWithCredential,
+  fetchSignInMethodsForEmail,
+} from "firebase/auth";
+import { auth } from "../firebase";
 import { toast } from "react-toastify";
 import useAuthStore from "../store/useAuthStore";
 import "./Login.css";
+import { firebaseSSOLogin,loginWithEmail  } from "../api/axiosClient"; // Import the new API function
 
 function Login({ isModal }) {
   const navigate = useNavigate();
@@ -19,6 +30,9 @@ function Login({ isModal }) {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [pendingCredential, setPendingCredential] = useState(null);
+  const [pendingEmail, setPendingEmail] = useState(null);
+  const [linkedProvider, setLinkedProvider] = useState(null);
 
   const handleChange = (e) => {
     setFormData({
@@ -27,287 +41,297 @@ function Login({ isModal }) {
     });
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (!formData.email || !formData.password) {
-      toast.warning("Please fill in all fields.");
-      return;
-    }
-
-    console.log("Form login:", formData);
-
-    // Show info notification
-    toast.info("Email/Password login is not yet implemented. Please use Google Sign-in.");
-
-    // TODO: Call API Login here when backend is ready
-  };
-
-  const isJwt = (token) => typeof token === "string" && token.split(".").length === 3;
-
-  const decodeJwt = (token) => {
-    if (!isJwt(token)) return null;
-
-    try {
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split("")
-          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-          .join("")
-      );
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      console.warn("JWT decode failed:", error);
-      return null;
-    }
-  };
-
-  // nếu đăng nhập gg thành công thì sẽ nhận được credentialResponse, trong đó có thể có access_token hoặc id_token
-  const handleGoogleSuccess = (credentialResponse) => {
-    setAuthError("");
-    console.log("Google sign in success:", credentialResponse);
-
-    const jwtSource =
-      credentialResponse?.credential || credentialResponse?.id_token;
-
-    if (jwtSource) {
-      const decoded = decodeJwt(jwtSource);
-      console.log("Decoded Google JWT payload:", decoded);
-      return;
-    }
-
-    if (credentialResponse?.access_token) {
-      const decodedAccessToken = decodeJwt(credentialResponse.access_token);
-      if (decodedAccessToken) {
-        console.log("Decoded Google access token:", decodedAccessToken);
-      } else {
-        console.log(
-          "Google access_token is opaque and not a JWT. Fetching user info from Google UserInfo endpoint..."
-        );
-        fetchGoogleUserInfo(credentialResponse.access_token);
-      }
-    }
-  };
-
-  // Fetch user info from Google UserInfo endpoint using access token
-  const fetchGoogleUserInfo = async (accessToken) => {
-    try {
-      const response = await fetch(
-        "https://www.googleapis.com/oauth2/v2/userinfo",
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const userInfo = await response.json();
-      console.log("Google user info:", userInfo);
-      // userInfo contains: id, email, verified_email, name, picture, locale, given_name, family_name, etc.
-
-      // Save user info and access token to auth store
-      setUser(userInfo);
-      setAccessToken(accessToken);
-      localStorage.setItem("token", accessToken);
-      localStorage.setItem("user", JSON.stringify(userInfo));
-      // console.log("token:", localStorage.getItem("token"));
-      // console.log("user:", localStorage.getItem("user"));
-
-      // Show success notification
-      toast.success(`Welcome back, ${userInfo.name}!`);
-
-      // Redirect to home after successful login
-      setTimeout(() => {
-        navigate("/");
-      }, 500);
-    } catch (error) {
-      console.error("Failed to fetch Google user info:", error);
-      setAuthError("Failed to fetch user info. Please try again.");
-      
-      // Show error notification
-      toast.error("Failed to fetch user info. Please try again.");
-    }
-  };
-
-  const handleGoogleError = () => {
-    setAuthError("Google sign-in failed. Vui lòng thử lại.");
-    
-    // Show error notification
-    toast.error("Google sign-in failed. Please try again.");
-  };
-
-  const loginWithGoogle = useGoogleLogin({
-    onSuccess: handleGoogleSuccess,
-    onError: handleGoogleError,
-  });
-
-  // Login with github
-const signInWithGitHub = async () => {
-  const provider = new GithubAuthProvider();
+  if (!formData.email || !formData.password) {
+    toast.warning("Please fill in all fields.");
+    return;
+  }
 
   try {
-    const result = await signInWithPopup(auth, provider);
+    const response = await loginWithEmail(formData.email, formData.password);
+    const backendToken = response.data.accessToken; // ⚠️ kiểm tra field name
 
-    const credential =
-      GithubAuthProvider.credentialFromResult(result);
-
-    const accessToken = credential?.accessToken;
-
+    // Tạo user object từ response backend
     const user = {
-      uid: result.user.uid,
-      name: result.user.displayName,
-      email: result.user.email,
-      avatar: result.user.photoURL,
+      uid: response.data.userId,       // ⚠️ kiểm tra field name
+      name: response.data.name,         // ⚠️ kiểm tra field name
+      email: response.data.email,       // ⚠️ kiểm tra field name
+      avatar: response.data.avatar,     // ⚠️ kiểm tra field name
     };
 
-    console.log("User:", user);
-    console.log("Access Token:", accessToken);
+    localStorage.setItem("user", JSON.stringify(user));
+    localStorage.setItem("token", backendToken);
+
+    setUser(user);
+    setAccessToken(backendToken);
+
+    toast.success(`Welcome ${user.name}`);
+    navigate("/");
+  } catch (error) {
+    console.error(error);
+    const message = error.response?.data?.message || "Login failed";
+    setAuthError(message);
+    toast.error(message);
+  }
+};
+
+  // lấy thông tin từ firebase user và lưu vào localStorage (sau này sửa lạ thành call api profile và hiển thị lên)
+  const saveUserData = (firebaseUser, accessToken) => {
+    const user = {
+      uid: firebaseUser.uid,
+      name: firebaseUser.displayName,
+      email: firebaseUser.email,
+      avatar: firebaseUser.photoURL,
+    };
 
     localStorage.setItem("user", JSON.stringify(user));
     localStorage.setItem("token", accessToken);
 
+    setUser(user);
+    setAccessToken(accessToken);
+
     toast.success(`Welcome ${user.name}`);
 
     navigate("/");
+  };
+
+  // Login with Google
+  const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      // Lấy Firebase ID Token
+      const firebaseIdToken = await result.user.getIdToken();
+      // Call backend
+      const response = await firebaseSSOLogin(firebaseIdToken);
+      const backendToken = response.data.accessToken; // ⚠️ đổi nếu backend dùng tên field khác
+      // Lưu token từ backend (không phải Firebase token)
+      saveUserData(result.user, backendToken);
+    } catch (error) {
+      console.error(error);
+      // Handle account linking error
+      if (error.code === "auth/account-exists-with-different-credential") {
+        const pendingCred = GoogleAuthProvider.credentialFromError(error);
+        const email = error.customData.email;
+        // Check which providers are already linked
+        try {
+          const methods = await fetchSignInMethodsForEmail(auth, email);
+          const provider = methods[0]; // e.g., 'github.com', 'google.com'
+          setLinkedProvider(provider);
+          setPendingCredential(pendingCred);
+          setPendingEmail(email);
+          const providerName = provider.includes("github")
+            ? "GitHub"
+            : "Google";
+          const errorMsg = `This email is already linked to ${providerName}. Sign in with ${providerName} first, then link Google.`;
+          setAuthError(errorMsg);
+          toast.warning(errorMsg);
+        } catch (fetchError) {
+          console.error(fetchError);
+          setAuthError("Email already in use. Please try another provider.");
+          toast.error("Email already in use.");
+        }
+      } else {
+        setAuthError("Google login failed");
+        toast.error("Google login failed");
+      }
+    }
+  };
+
+  // Login with github
+  const signInWithGitHub = async () => {
+  const provider = new GithubAuthProvider();
+
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const firebaseIdToken = await result.user.getIdToken();
+
+    const response = await firebaseSSOLogin(firebaseIdToken);
+    const backendToken = response.data.accessToken;
+
+    saveUserData(result.user, backendToken);
+    console.log("GitHub login successful:", response);
   } catch (error) {
     console.error(error);
 
-    toast.error("GitHub login failed");
+    if (error.code === "auth/account-exists-with-different-credential") {
+      const pendingCred = GithubAuthProvider.credentialFromError(error);
+      const email = error.customData.email;
+
+      try {
+        const methods = await fetchSignInMethodsForEmail(auth, email);
+        const provider = methods[0];
+        setLinkedProvider(provider);
+        setPendingCredential(pendingCred);
+        setPendingEmail(email);
+
+        const providerName = provider.includes("github") ? "GitHub" : "Google";
+        const errorMsg = `This email is already linked to ${providerName}. Sign in with ${providerName} first, then link GitHub.`;
+        setAuthError(errorMsg);
+        toast.warning(errorMsg);
+      } catch (fetchError) {
+        console.error(fetchError);
+        setAuthError("Email already in use. Please try another provider.");
+        toast.error("Email already in use.");
+      }
+    } else {
+      setAuthError("GitHub login failed");
+      toast.error("GitHub login failed");
+    }
   }
 };
 
-  const handleGitHubSuccess = async (code) => {
-    toast.success("GitHub authorization code received.");
-    console.log("GitHub authorization code:", code);
+  // Handle linking pending credential to existing account
+  const handleLinkAccount = async () => {
+    if (!pendingCredential || !auth.currentUser) return;
 
-    // TODO: Send code to backend for token exchange and user info fetching
-    // Example:
-    // const result = await fetch('/api/auth/github', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ code }),
-    // });
-    // const userInfo = await result.json();
-    // setUser(userInfo);
-    // setAccessToken(userInfo.accessToken);
-    // localStorage.setItem('token', userInfo.accessToken);
-    // localStorage.setItem('user', JSON.stringify(userInfo));
-    // navigate('/');
+    try {
+      await linkWithCredential(auth.currentUser, pendingCredential);
+      const accessToken = auth.currentUser.getIdToken();
+
+      saveUserData(auth.currentUser, accessToken);
+      setPendingCredential(null);
+      setPendingEmail(null);
+      setLinkedProvider(null);
+
+      toast.success("Account linked successfully!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to link accounts. Please try again.");
+    }
   };
 
   return (
     <div id="login-page">
-    <div className={isModal ? "login-page modal-login" : "login-page"}>
-      <div className="login-card">
-        <h1>Welcome Back</h1>
+      <div className={isModal ? "login-page modal-login" : "login-page"}>
+        <div className="login-card">
+          <h1>Welcome Back</h1>
 
-        <p className="subtitle">
-          Sign in to continue your preparation.
-        </p>
+          <p className="subtitle">Sign in to continue your preparation.</p>
 
-        <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Email Address</label>
 
-          <div className="form-group">
-            <label>Email Address</label>
-
-            <div className="input-wrapper">
-              <MdEmail className="input-icon" />
-              <input
-                type="email"
-                name="email"
-                placeholder="engineer@devprep.ai"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
+              <div className="input-wrapper">
+                <MdEmail className="input-icon" />
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="engineer@devprep.ai"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="form-group">
-            <label>Password</label>
+            <div className="form-group">
+              <label>Password</label>
 
-            <div className="input-wrapper">
-              <MdLock className="input-icon" />
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Enter your password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-              />
+              <div className="input-wrapper">
+                <MdLock className="input-icon" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="Enter your password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <AiOutlineEyeInvisible /> : <AiOutlineEye />}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-options">
+              <label>
+                <input type="checkbox" />
+                Remember me
+              </label>
+
+              <a href="/forgot-password">Forgot Password?</a>
+            </div>
+
+            <button type="submit" className="login-btn">
+              Sign In
+            </button>
+
+            {authError && <p className="auth-error">{authError}</p>}
+
+            {pendingCredential && auth.currentUser && (
               <button
                 type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="login-btn"
+                onClick={handleLinkAccount}
+                style={{ marginTop: "10px", backgroundColor: "#28a745" }}
               >
-                {showPassword ? (
-                  <AiOutlineEyeInvisible />
-                ) : (
-                  <AiOutlineEye />
-                )}
+                ✓ Link{" "}
+                {linkedProvider?.includes("github") ? "GitHub" : "Google"}{" "}
+                Account
               </button>
-            </div>
+            )}
+
+            {pendingCredential && !auth.currentUser && (
+              <div
+                style={{
+                  marginTop: "10px",
+                  padding: "10px",
+                  backgroundColor: "#fff3cd",
+                  borderRadius: "5px",
+                  textAlign: "center",
+                }}
+              >
+                <p style={{ margin: "0 0 10px 0", fontSize: "14px" }}>
+                  Please sign in with{" "}
+                  <strong>
+                    {linkedProvider?.includes("github") ? "GitHub" : "Google"}
+                  </strong>{" "}
+                  first to link this account.
+                </p>
+              </div>
+            )}
+          </form>
+
+          <div className="divider">
+            <span>OR</span>
           </div>
 
-          <div className="form-options">
-            <label>
-              <input type="checkbox" />
-              Remember me
-            </label>
+          <div className="social-buttons">
+            <button
+              type="button"
+              className="social-btn"
+              onClick={() => signInWithGoogle()}
+            >
+              <FcGoogle size={18} />
+              <span>Sign in with Google</span>
+            </button>
 
-            <a href="/forgot-password">
-              Forgot Password?
-            </a>
+            <button
+              type="button"
+              className="social-btn"
+              onClick={() => signInWithGitHub()}
+            >
+              <AiFillGithub size={18} />
+              <span>Sign in with GitHub</span>
+            </button>
           </div>
 
-          <button type="submit" className="login-btn">
-            Sign In
-          </button>
-
-          {authError && <p className="auth-error">{authError}</p>}
-        </form>
-
-        <div className="divider">
-          <span>OR</span>
+          <p className="register-text">
+            Don't have an account?
+            <a href="/register"> Register</a>
+          </p>
         </div>
-
-        <div className="social-buttons">
-          <button
-            type="button"
-            className="social-btn"
-            onClick={() => loginWithGoogle()}
-          >
-            <FcGoogle size={18} />
-            <span>Sign in with Google</span>
-          </button>
-
-          <button
-            type="button"
-            className="social-btn"
-            onClick={() => signInWithGitHub()}
-          >
-            <AiFillGithub size={18} />
-            <span>Sign in with GitHub</span>
-          </button>
-        </div>
-
-        <p className="register-text">
-          Don't have an account?
-          <a href="/register"> Register</a>
-        </p>
-
       </div>
     </div>
-    </div>
-
   );
 }
 
