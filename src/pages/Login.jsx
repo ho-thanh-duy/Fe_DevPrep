@@ -18,9 +18,9 @@ import { auth } from "../firebase";
 import { toast } from "react-toastify";
 import useAuthStore from "../store/useAuthStore";
 import "./Login.css";
-import { firebaseSSOLogin,loginWithEmail  } from "../api/axiosClient"; // Import the new API function
+import { firebaseSSOLogin, loginWithEmail } from "../api/axiosClient"; // Import the new API function
 
-function Login({ isModal }) {
+function Login({ isModal, onClose ,switchToRegister, switchToForgot}) {
   const navigate = useNavigate();
   const { setUser, setAccessToken } = useAuthStore();
 
@@ -33,7 +33,6 @@ function Login({ isModal }) {
   const [pendingCredential, setPendingCredential] = useState(null);
   const [pendingEmail, setPendingEmail] = useState(null);
   const [linkedProvider, setLinkedProvider] = useState(null);
-
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -42,40 +41,46 @@ function Login({ isModal }) {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!formData.email || !formData.password) {
-    toast.warning("Please fill in all fields.");
-    return;
-  }
+    if (!formData.email || !formData.password) {
+      toast.warning("Please fill in all fields.");
+      return;
+    }
 
-  try {
-    const response = await loginWithEmail(formData.email, formData.password);
-    const backendToken = response.data.accessToken; // ⚠️ kiểm tra field name
+    try {
+      const response = await loginWithEmail(formData.email, formData.password);
+      const backendToken = response.data.data.accessToken; // ⚠️ kiểm tra field name
 
-    // Tạo user object từ response backend
-    const user = {
-      uid: response.data.userId,       // ⚠️ kiểm tra field name
-      name: response.data.name,         // ⚠️ kiểm tra field name
-      email: response.data.email,       // ⚠️ kiểm tra field name
-      avatar: response.data.avatar,     // ⚠️ kiểm tra field name
-    };
+      // Tạo user object từ response backend
+      const user = {
+        uid: response.data.data.userId, // ⚠️ kiểm tra field name
+        name: response.data.data.name, // ⚠️ kiểm tra field name
+        email: response.data.data.email, // ⚠️ kiểm tra field name
+        avatar: response.data.data.avatar, // ⚠️ kiểm tra field name
+      };
 
-    localStorage.setItem("user", JSON.stringify(user));
-    localStorage.setItem("token", backendToken);
+      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("token", backendToken);
 
-    setUser(user);
-    setAccessToken(backendToken);
+      setUser(user);
+      setAccessToken(backendToken);
 
-    toast.success(`Welcome ${user.name}`);
-    navigate("/");
-  } catch (error) {
-    console.error(error);
-    const message = error.response?.data?.message || "Login failed";
-    setAuthError(message);
-    toast.error(message);
-  }
-};
+      if (onClose) {
+        onClose();
+      }
+      toast.success(`Welcome ${user.name}`);
+
+      setTimeout(() => {
+        navigate("/");
+      }, 0);
+    } catch (error) {
+      console.error(error);
+      const message = error.response?.data?.message || "Login failed";
+      setAuthError(message);
+      toast.error(message);
+    }
+  };
 
   // lấy thông tin từ firebase user và lưu vào localStorage (sau này sửa lạ thành call api profile và hiển thị lên)
   const saveUserData = (firebaseUser, accessToken) => {
@@ -91,10 +96,13 @@ function Login({ isModal }) {
 
     setUser(user);
     setAccessToken(accessToken);
-
+    // close madal login
+if (onClose) {
+  onClose();
+}
     toast.success(`Welcome ${user.name}`);
-
-    navigate("/");
+setTimeout(() => {
+    navigate("/");},0)
   };
 
   // Login with Google
@@ -106,9 +114,10 @@ function Login({ isModal }) {
       const firebaseIdToken = await result.user.getIdToken();
       // Call backend
       const response = await firebaseSSOLogin(firebaseIdToken);
-      const backendToken = response.data.accessToken; // ⚠️ đổi nếu backend dùng tên field khác
+      const backendToken = response.data.data.accessToken; // ⚠️ đổi nếu backend dùng tên field khác
       // Lưu token từ backend (không phải Firebase token)
       saveUserData(result.user, backendToken);
+      console.log("LOGIN RESPONSE:", response.data.data);
     } catch (error) {
       console.error(error);
       // Handle account linking error
@@ -142,46 +151,48 @@ function Login({ isModal }) {
 
   // Login with github
   const signInWithGitHub = async () => {
-  const provider = new GithubAuthProvider();
+    const provider = new GithubAuthProvider();
 
-  try {
-    const result = await signInWithPopup(auth, provider);
-    const firebaseIdToken = await result.user.getIdToken();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const firebaseIdToken = await result.user.getIdToken();
 
-    const response = await firebaseSSOLogin(firebaseIdToken);
-    const backendToken = response.data.accessToken;
+      const response = await firebaseSSOLogin(firebaseIdToken);
+      const backendToken = response.data.data.accessToken;
 
-    saveUserData(result.user, backendToken);
-    console.log("GitHub login successful:", response);
-  } catch (error) {
-    console.error(error);
+      saveUserData(result.user, backendToken);
+      console.log("GitHub login successful:", response);
+    } catch (error) {
+      console.error(error);
 
-    if (error.code === "auth/account-exists-with-different-credential") {
-      const pendingCred = GithubAuthProvider.credentialFromError(error);
-      const email = error.customData.email;
+      if (error.code === "auth/account-exists-with-different-credential") {
+        const pendingCred = GithubAuthProvider.credentialFromError(error);
+        const email = error.customData.email;
 
-      try {
-        const methods = await fetchSignInMethodsForEmail(auth, email);
-        const provider = methods[0];
-        setLinkedProvider(provider);
-        setPendingCredential(pendingCred);
-        setPendingEmail(email);
+        try {
+          const methods = await fetchSignInMethodsForEmail(auth, email);
+          const provider = methods[0];
+          setLinkedProvider(provider);
+          setPendingCredential(pendingCred);
+          setPendingEmail(email);
 
-        const providerName = provider.includes("github") ? "GitHub" : "Google";
-        const errorMsg = `This email is already linked to ${providerName}. Sign in with ${providerName} first, then link GitHub.`;
-        setAuthError(errorMsg);
-        toast.warning(errorMsg);
-      } catch (fetchError) {
-        console.error(fetchError);
-        setAuthError("Email already in use. Please try another provider.");
-        toast.error("Email already in use.");
+          const providerName = provider.includes("github")
+            ? "GitHub"
+            : "Google";
+          const errorMsg = `This email is already linked to ${providerName}. Sign in with ${providerName} first, then link GitHub.`;
+          setAuthError(errorMsg);
+          toast.warning(errorMsg);
+        } catch (fetchError) {
+          console.error(fetchError);
+          setAuthError("Email already in use. Please try another provider.");
+          toast.error("Email already in use.");
+        }
+      } else {
+        setAuthError("GitHub login failed");
+        toast.error("GitHub login failed");
       }
-    } else {
-      setAuthError("GitHub login failed");
-      toast.error("GitHub login failed");
     }
-  }
-};
+  };
 
   // Handle linking pending credential to existing account
   const handleLinkAccount = async () => {
@@ -258,7 +269,14 @@ function Login({ isModal }) {
                 Remember me
               </label>
 
-              <a href="/forgot-password">Forgot Password?</a>
+              {/* Kiểm tra nếu chạy trong Modal thì đổi view, nếu chạy trang độc lập thì giữ link thẻ a */}
+              {isModal && switchToForgot ? (
+                <span onClick={switchToForgot} style={{ color: "#a78bfa", cursor: "pointer" }}>
+                  Forgot Password?
+                </span>
+              ) : (
+                <a href="/forgot-password">Forgot Password?</a>
+              )}
             </div>
 
             <button type="submit" className="login-btn">
@@ -327,7 +345,13 @@ function Login({ isModal }) {
 
           <p className="register-text">
             Don't have an account?
-            <a href="/register"> Register</a>
+            {isModal && switchToRegister ? (
+              <span onClick={switchToRegister} style={{ color: "#a78bfa", cursor: "pointer", fontWeight: 600 }}>
+                {" "}Register
+              </span>
+            ) : (
+              <a href="/register"> Register</a>
+            )}
           </p>
         </div>
       </div>
